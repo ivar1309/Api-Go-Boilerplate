@@ -17,7 +17,7 @@ func JWTAuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := utils.ValidateJWT(tokenStr)
+		claims, err := utils.ValidateToken(tokenStr, false)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return

@@ -3,7 +3,6 @@ package controllers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/ivar1309/Api-Go-Boilerplate/internal/models"
 	"github.com/ivar1309/Api-Go-Boilerplate/internal/utils"
@@ -14,32 +13,71 @@ type AuthRequest struct {
 	Password string `json:"password"`
 }
 
+type AuthResponse struct {
+	Message string       `json:"message"`
+	Tokens  utils.Tokens `json:"tokens"`
+}
+
 func Register(w http.ResponseWriter, r *http.Request) {
 	var req AuthRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	if _, exists := models.Users[req.Username]; exists {
+	_, err := models.GetUserByUsername(req.Username)
+	if err == nil {
 		http.Error(w, "User already exists", http.StatusBadRequest)
 		return
 	}
 
 	hashedPwd, _ := utils.HashPassword(req.Password)
-	user := models.User{Username: req.Username, Password: hashedPwd, Role: "user"}
-	models.Users[req.Username] = user
+	user := models.User{
+		Username:     req.Username,
+		PasswordHash: hashedPwd,
+		Role:         "user",
+	}
 
-	json.NewEncoder(w).Encode(map[string]string{"message": "User registered"})
+	err = models.CreateUser(user)
+	if err != nil {
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+
+	tokens, _ := utils.GenerateTokens(user.Username, user.Role)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AuthResponse{Message: "User created", Tokens: tokens})
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
 	var req AuthRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	user, exists := models.Users[req.Username]
-	if !exists || !utils.CheckPassword(req.Password, user.Password) {
+	user, err := models.GetUserByUsername(req.Username)
+	if err != nil {
+		http.Error(w, "No such user", http.StatusNotFound)
+		return
+	}
+	if !utils.CheckPassword(req.Password, user.PasswordHash) {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
-	token, _ := utils.GenerateJWT(user.Username, user.Role, time.Hour*24)
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
+	tokens, _ := utils.GenerateTokens(user.Username, user.Role)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AuthResponse{Message: "Login successful", Tokens: tokens})
+}
+
+func Refresh(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+
+	claims, err := utils.ValidateToken(body.RefreshToken, true)
+	if err != nil {
+		http.Error(w, "Invalid refresh", http.StatusUnauthorized)
+		return
+	}
+
+	tokens, _ := utils.GenerateTokens(claims.Username, claims.Role)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AuthResponse{Message: "Refresh successful", Tokens: tokens})
 }
