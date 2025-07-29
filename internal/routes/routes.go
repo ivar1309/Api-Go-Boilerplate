@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/ivar1309/Api-Go-Boilerplate/internal/controllers"
 	"github.com/ivar1309/Api-Go-Boilerplate/internal/middleware"
+	u "github.com/ivar1309/Api-Go-Boilerplate/internal/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -19,5 +20,9 @@ func SetupRouter() *mux.Router {
 	protected.Use(middleware.JWTAuthMiddleware)
 	protected.HandleFunc("", controllers.ProtectedEndpoint).Methods("GET")
 
+	adminonly := r.PathPrefix("/api/admin").Subrouter()
+	adminonly.Use(middleware.JWTAuthMiddleware)
+	adminonly.Use(middleware.RequirePermission(u.AdminOnly))
+	adminonly.HandleFunc("", controllers.AdminOnlyEndpoint).Methods("GET")
 	return r
 }
