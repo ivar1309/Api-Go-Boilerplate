@@ -1,10 +1,11 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/ivar1309/Api-Go-Boilerplate/internal/models"
+	"github.com/ivar1309/Api-Go-Boilerplate/internal/db"
 	"github.com/ivar1309/Api-Go-Boilerplate/internal/utils"
 )
 
@@ -22,20 +23,19 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	var req AuthRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	_, err := models.GetUserByUsername(req.Username)
+	user, err := db.GetQ().GetUserByUsername(context.Background(), req.Username)
 	if err == nil {
 		http.Error(w, "User already exists", http.StatusBadRequest)
 		return
 	}
 
 	hashedPwd, _ := utils.HashPassword(req.Password)
-	user := models.User{
+
+	user, err = db.GetQ().CreateUser(context.Background(), db.CreateUserParams{
 		Username:     req.Username,
 		PasswordHash: hashedPwd,
 		Role:         "user",
-	}
-
-	err = models.CreateUser(user)
+	})
 	if err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
@@ -50,7 +50,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	var req AuthRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	user, err := models.GetUserByUsername(req.Username)
+	user, err := db.GetQ().GetUserByUsername(context.Background(), req.Username)
 	if err != nil {
 		http.Error(w, "No such user", http.StatusNotFound)
 		return
